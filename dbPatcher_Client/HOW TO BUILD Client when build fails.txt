@@ -1,0 +1,21 @@
+Do the following manually
+
+[root@teamcityagentc SilentUpdater]# chmod +xxx gradlew
+
+npm clean
+
+delete client/node_modules
+delete client/bower_modules
+
+[root@teamcityagentc client]# sudo npm install             <-- creates node_modules folder
+[root@teamcityagentc client]# bower install --allow-root   <-- creates bower_modules folder
+
+[root@teamcityagentc SilentUpdater]# grunt build
+
+cd ..
+
+[root@teamcityagentc SilentUpdater]# ./gradlew     <-- may fail with gralde bowerInstall error
+
+[root@teamcityagentc SilentUpdater]# sudo ./gradlew -b client/build.gradle installGrunt
+
+[root@teamcityagentc SilentUpdater]# sudo ./gradlew -b client/build.gradle gruntBuildWithOpts

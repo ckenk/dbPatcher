@@ -1,0 +1,20 @@
+<div ng-controller="MainCtrl">
+	
+<div class="row marketing">
+  <h4>dbPatcher</h4>
+  <p>
+    On next screen upload the Vehicle File and the ECU Files that has varver ids that need to be inserted to the Vehicle File.
+  </p>
+  <p style="color: #F00">
+    Do not use menus (Upload or Edit) on the top of the page if you have a new Vehicle File.  Click on "Next" and continue the screens.
+  </p>
+	
+</div>
+	<div class="jumbotron"  ng-show="!isShown(yb)">
+		<div class="text-center"> 
+			<button class="btn btn-sm btn-success" ng-click="init()">Next</button>
+		</div>
+		<label>{{status}}</label>
+	</div>
+	
+</div>

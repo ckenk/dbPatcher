@@ -1,0 +1,199 @@
+<div ng-controller="EditCtrl">
+	Edit View
+	<table st-table="displayedCollection" st-safe-src="ybCollection" class="table table-striped">
+		<thead>
+			<tr>
+				<th>YB Code</th>
+				<th>Year</th>
+				<th>Body</th>
+				<th>Action</th>
+			</tr>
+			<tr>
+				<th colspan="4">
+					<!--angular.element(this).scope().setFiles(this.files)-->
+					<!--<input st-search placeholder="global search" class="input-sm form-control" type="search" ng-model="searchText" ng-model-options="{ debounce: 500 }" ng-change="angular.element(this).scope().checkSelectedYb()"/>-->
+					<input st-search placeholder="global search" class="input-sm form-control" type="search" ng-model="searchText" ng-change="checkSelectedYb()" />
+				</th>
+			</tr>
+		</thead>
+		<tbody>
+			<tr ng-repeat="yb in displayedCollection" ng-show="isShown(yb)">
+				<td>{{yb.yb_code}}</td>
+				<td>{{yb.year}}</td>
+				<td>{{yb.body}}</td>
+				<!--      		<td><a ng-href="http://localhost:8080/vehicle/{{yb.year}}/{{yb.body}}" ng-click="showEngVehConfigs({{yb.year}},{{yb.body}})">Select</a></td>-->
+				<td>
+					<button type="button" class="btn btn-sm btn-primary" ng-click="showEngVehConfigs(yb)">Select</button>
+				</td>
+			</tr>
+		</tbody>
+	</table>
+
+	<form name="varVerForm" ng-submit="insertEcuVarVerToGlobal()">
+		<div class="panel panel-success" ng-show="!isShown(yb)">
+			<div class="panel-heading">
+				<h3 class="panel-title">ECU Variant Info</h3>
+			</div>
+			<table st-table="displayedEcuVarVerCollection" st-safe-src="ecuVarVerCollection" class="table table-striped" ng-show="!isShown(yb)">
+				<!--	<table st-table="ybCollection" class="table table-striped">-->
+				<thead>
+					<tr class="danger">
+						<td colspan="6">
+							<h5>Select and enter the new ecu variants before deleting the old ones from the vehicle config table below.</h5></td>
+					</tr>
+					<tr>
+						<th>File Name</th>
+						<th>Var Ver Id</th>
+						<th>Update Existing ECU</th>
+						<th>New ECU Entry</th>
+						<th>Extra</th>
+						<th>11/29 bit</th>
+						<!--
+						<th>protocol_id</th>
+						<th>protocol_sdd_id</th>
+						<th>sdd_version</th>
+						<th>transport</th>
+						<th>use_29_bit_can_id</th>
+						<th>use_frame_padding</th>
+						<th>use_extended_address</th>
+						-->
+					</tr>
+					<tr></tr>
+				</thead>
+				<tbody>
+					<tr ng-repeat="ecu_var_ver in displayedEcuVarVerCollection">
+						<td>{{ecu_var_ver.file_name}}</td>
+						<td>{{ecu_var_ver.id}}</td>
+						<td>
+<!--							<input type="checkbox" data-checklist-model="var_ver_selected" data-checklist-value="ecu_var_ver" ng-disabled="ecu_var_ver.new_entry" ng-click="ecu_var_ver.selected = !ecu_var_ver.selected">-->
+							<input type="checkbox" data-checklist-model="var_ver_selected" data-checklist-value="ecu_var_ver" ng-disabled="ecu_var_ver.new_entry" ng-click="set_selected_checkbox(ecu_var_ver)">
+<!--							<input type="radio" name="check_box_name" ng-model="var_ver_selected" value="{{ecu_var_ver.id}}" ng-disabled="ecu_var_ver.new_entry" ng-click="ecu_var_ver.selected = !ecu_var_ver.selected" required>-->
+						</td>
+						<td>
+							<input type="checkbox" data-checklist-model="var_ver_selected_new_entry" data-checklist-value="ecu_var_ver" ng-show="ecu_var_ver.new_entry" ng-click="set_selected_checkbox(ecu_var_ver)">
+						</td>
+						<td>
+							<input type="text" name="xmit_{{ecu_var_ver.id}}" ng-model="new_entry_params['xmit_'+ecu_var_ver.id]" ng-disabled="!ecu_var_ver.selected" ng-show="ecu_var_ver.new_entry" placeholder="XMIT" />
+							<input type="text" name="gwbitpos_{{ecu_var_ver.id}}" ng-model="new_entry_params['gwbitpos_'+ecu_var_ver.id]" ng-disabled="!ecu_var_ver.selected" ng-show="ecu_var_ver.new_entry" placeholder="Gateway Bit Pos" />
+<!--							<select name="bus_{{ecu_var_ver.id}}" ng-model="new_entry_params['bus_'+ecu_var_ver.id]" ng-options="bus.name for bus in busses" ng-disabled="!ecu_var_ver.new_entry" ng-show="ecu_var_ver.new_entry"></select>-->
+							<select name="bus_{{ecu_var_ver.id}}" ng-model="new_entry_params['bus_'+ecu_var_ver.id]" ng-options="(bus.id + ' | ' + bus.name + ' | ' + bus.interface_pins) for bus in ecu_var_ver.buses" ng-disabled="!ecu_var_ver.selected" ng-show="ecu_var_ver.new_entry"></select>
+						</td>
+						<td>
+							<label>
+								<!--<input type="radio" name="{{ecu_var_ver.id}}" ng-model="ecu_var_ver.canbitsize" value="11" ng-disabled="!(ecu_var_ver.has_11_bit_ids && ecu_var_ver.has_29_bit_ids)" required="false">11 bit</label>-->
+								<input type="radio" name="{{ecu_var_ver.id}}" ng-model="ecu_var_ver.canbitsize" value="11" ng-disabled="!(ecu_var_ver.selected)" required>11 bit</label>
+							<label>
+								<!--<input type="radio" name="{{ecu_var_ver.id}}" ng-model="ecu_var_ver.canbitsize" value="29" ng-disabled="!(ecu_var_ver.has_11_bit_ids && ecu_var_ver.has_29_bit_ids)" required="false">29 bit</label>-->
+								<input type="radio" name="{{ecu_var_ver.id}}" ng-model="ecu_var_ver.canbitsize" value="29" ng-disabled="!(ecu_var_ver.selected)" required>29 bit</label>
+						</td>
+					</tr>
+					<tr>
+						<td colspan="1">
+							<!--button class="btn btn-sm btn-primary" ng-click="insertEcuVarVerToGlobal()" ng-show="!isShown(yb)">Add to Global</button-->
+							<button class="btn btn-sm btn-primary" type="submit">Add to Vehicle</button>
+						</td>
+						<td colspan="5">
+							<label name="varver_insert_status">{{varver_insert_status.value}}</label>
+						</td>
+					</tr>
+				</tbody>
+			</table>
+		</div>
+	</form>
+
+	<div class="panel panel-success" ng-show="!isShown(yb)">
+		<div class="panel-heading">
+			<h3 class="panel-title">Vehicle Configuration</h3>
+		</div>
+		<div class="panel-body">
+			<div class="table-responsive">
+				<!--	<table st-table="displayedEvcCollection" st-safe-src="evcCollection" class="table table-striped" ng-show="!isShown(yb)" >-->
+				<table st-table="displayedEvcCollection" st-safe-src="evcCollection" ng-show="!isShown(yb)" class="table table-bordered table-hover specialCollapse">
+					<!--	<table st-table="ybCollection" class="table table-striped">-->
+					<thead>
+						<tr>
+							<!--		      <th>id</th>-->
+							<th>Action</th>
+							<th>year</th>
+							<th>body</th>
+							<th>var_ver_id</th>
+							<th>ecu_acronym</th>
+							<th>is_gateway</th>
+							<th>xmit_str</th>
+							<th>disable_gateway_command</th>
+							<th>gateway_bit_position</th>
+							<th>bus_id</th>
+							<th>diag_bus_id</th>
+							<th>request_id</th>
+							<th>response_id</th>
+							<!--			<th>broadcast_id</th>-->
+							<!--			<th>protocol_config_id</th>-->
+							<!--			<th>kline_protocol_config_id</th>-->
+							<!--			<th>ecu_address</th>-->
+							<th>ident_type</th>
+							<th>is_engine</th>
+							<th>is_vin_master</th>
+							<!--			<th>architecture_id</th>-->
+							<!--			<th>yb_version</th>-->
+							<th>ecu_config</th>
+							<!--			<th>name_string_id</th>-->
+							<th>db_name</th>
+							<!--			<th>built_state</th>-->
+							<th>odometer_master_data</th>
+							<!--			<th>proxi_type</th>-->
+							<!--			<th>proxi_config_set_id</th>-->
+							<th>is_sgw</th>
+						</tr>
+						<tr>
+							<!--			<th colspan="3"><input st-search placeholder="global search" class="input-sm form-control" type="search"/></th>-->
+						</tr>
+					</thead>
+					<tbody>
+						<tr ng-repeat="evc in displayedEvcCollection">
+							<!--      		<td>{{evc.id}}</td>-->
+							<td>
+								<button type="button" class="btn btn-warning glyphicon glyphicon-trash" ng-click="deleteEngVehConf(evc)">Delete</button>
+							</td>
+							<td>{{evc.year}}</td>
+							<td>{{evc.body}}</td>
+							<td>{{evc.var_ver_id}}</td>
+							<td>{{evc.ecu_acronym}}</td>
+							<td>{{evc.is_gateway}}</td>
+							<td>{{evc.xmit_str}}</td>
+							<td>{{evc.disable_gateway_command}}</td>
+							<td>{{evc.gateway_bit_position}}</td>
+							<td>{{evc.bus_id}}</td>
+							<td>{{evc.diag_bus_id}}</td>
+							<td>{{evc.request_id}}</td>
+							<td>{{evc.response_id}}</td>
+							<!--			<td>{{evc.broadcast_id}}</td>-->
+							<!--			<td>{{evc.protocol_config_id}}</td>-->
+							<!--			<td>{{evc.kline_protocol_config_id}}</td>-->
+							<!--			<td>{{evc.ecu_address}}</td>-->
+							<td>{{evc.ident_type}}</td>
+							<td>{{evc.is_engine}}</td>
+							<td>{{evc.is_vin_master}}</td>
+							<!--			<td>{{evc.architecture_id}}</td>-->
+							<!--			<td>{{evc.yb_version}}</td>-->
+							<td>{{evc.ecu_config}}</td>
+							<!--			<td>{{evc.name_string_id}}</td>-->
+							<td>{{evc.db_name}}</td>
+							<!--			<td>{{evc.built_state}}</td>-->
+							<td>{{evc.odometer_master_data}}</td>
+							<!--			<td>{{evc.proxi_type}}</td>-->
+							<!--			<td>{{evc.proxi_config_set_id}}</td>-->
+							<td>{{evc.is_sgw}}</td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+	</div>
+
+	<div name="ticker">{{status}}</div>
+	<div class="jumbotron" ng-show="!isShown(yb)">
+		<div class="text-center">
+			<button class="btn btn-sm btn-success" ng-click="done()">Done</button>
+		</div>
+	</div>
+</div>

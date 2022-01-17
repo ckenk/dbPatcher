@@ -1,0 +1,27 @@
+<div ng-controller="UploadCtrl" nv-file-drop="" uploader="uploader" class="jumbotron">
+<!-- Example from: http://jsfiddle.net/danialfarid/maqbzv15/1118/ -->
+	<form name="glDbForm">
+		<fieldset>
+			<legend>Upload Vehicle File</legend>
+<!--
+			Username:
+			<input type="text" name="userName" ng-model="username" size="31" required>
+			<i ng-show="myForm.userName.$error.required">*required</i>
+-->
+			<br>Vehicle File:
+			<input type="file" ngf-select ng-model="vehicleFile" name="file" ngf-max-size="2MB" required ngf-model-invalid="errorFile" accept=".db">
+			<i ng-show="myForm.file.$error.required">*required</i>
+			<br>
+			<i ng-show="myForm.file.$error.maxSize">File too large {{errorFile.size / 1000000|number:1}}MB: max 2M</i>
+			
+			<button ng-disabled="!glDbForm.$valid" ng-click="uploadPic(vehicleFile)">Submit</button>
+			<span class="progress" ng-show="vehicleFile.progress >= 0">
+        		<div style="width:{{vehicleFile.progress}}%" ng-bind="vehicleFile.progress + '%'"></div>
+      		</span>
+			<span ng-show="vehicleFile.result">Upload Successful</span>
+			<span class="err" ng-show="errorMsg">{{errorMsg}}</span>
+		</fieldset>
+		<br>
+	</form>
+	<button button class="btn btn-sm btn-success" ng-click="goToEcus()" ng-show="upload_success">Next</button>
+</div>

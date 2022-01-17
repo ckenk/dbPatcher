@@ -1,0 +1,18 @@
+<div ng-controller="UploadEcusCtrl" nv-file-drop="">
+	<div class="jumbotron">
+		<h4>Upload ECU file(s)</h4>
+
+		<button ngf-select="uploadFiles($files)" multiple accept=".db">Select Files</button>
+		<br>
+		<br>Files:
+		<ul>
+			<li ng-repeat="f in files" style="font:smaller">
+				{{f.name}}
+			</li>
+		</ul>
+		<span class="progress" ng-show="progress >= 0">
+        <div style="width:{{progress}}%" ng-bind="progress + '%'"></div>
+    </span> {{errorMsg}}
+	<button button class="btn btn-sm btn-success" ng-click="goToEdit()" ng-show="upload_success">Next</button>
+	</div>
+</div>
