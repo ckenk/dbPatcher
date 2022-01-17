@@ -1,0 +1,464 @@
+package com.fca.dbedit.data
+
+import com.fca.dbedit.DbData
+import com.fca.dbedit.entity.Bus
+import com.fca.dbedit.entity.EcuConfigOverride
+import com.fca.dbedit.entity.EcuToBus
+import com.fca.dbedit.entity.EngVehicleConfig
+import com.fca.dbedit.entity.ProtocolConfig
+import com.fca.dbedit.entity.VarVer
+import com.fca.dbedit.exception.EngVehicleConfigUpdateFailedException
+import groovy.io.FileType
+import org.slf4j.Logger
+import org.slf4j.LoggerFactory
+import org.springframework.boot.autoconfigure.jdbc.DataSourceBuilder
+import org.springframework.dao.EmptyResultDataAccessException
+import org.springframework.jdbc.core.JdbcTemplate
+import org.springframework.stereotype.Component
+
+import java.sql.ResultSet;
+import java.sql.SQLException
+
+import com.fca.dbedit.entity.YbInfo
+import org.springframework.jdbc.core.JdbcOperations
+import org.springframework.jdbc.core.RowMapper
+
+import javax.sql.DataSource;
+
+@Component
+public class JdbcRepository {
+
+    private JdbcOperations jdbc_global = null;
+    private JdbcOperations jdbc_ecus = null;
+
+    final private static Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+
+    public List<YbInfo> allYBs(DbData dbData) {
+        return getGlobalDataSource(dbData).query("SELECT distinct year, body FROM yb_info", new YbInfoRowMapper());
+    }
+
+    public boolean init() {
+
+    }
+
+    public List<String> ecuDbs() {
+        def list = []
+        def dir = new File(DbData.ECUS_DB_DIR)
+        dir.eachFileRecurse(FileType.FILES) { file ->
+            list << file.name.split(/\./)[0]
+        }
+        return list
+    }
+
+    public insertNewVarVerInToGlobal(String year, String body, String ecu_db_name, String ecu_var_ver_id, Boolean newEntry, Map newEntryMap, DbData dbData) {
+        def res_var_ver = null, res_eng_veh_conf = null;
+
+        VarVer v = getEcuDataSource(ecu_db_name, dbData)
+                .query("SELECT * FROM var_ver WHERE id = ?",
+                [ecu_var_ver_id] as Object[],
+                new EcuVarVerRowMapper())[0]
+
+        ProtocolConfig pc = getEcuDataSource(ecu_db_name, dbData)
+                .query("SELECT * FROM protocol_config WHERE id = ?",
+                [v.protocol_config_id] as Object[],
+                new EcuProtConfigRowMapper())[0]
+
+        //Service ecus dbs does not come with whether its 29 bit or 11 bit addressing. So get that from user
+        Integer use_29_bit_can_id = 0;
+        if(newEntryMap["canbitsize"].equals("29"))
+            use_29_bit_can_id = 1;
+        else
+            use_29_bit_can_id = 0;
+
+        Number protConfId = null;
+        try {
+            protConfId = getGlobalDataSource(dbData).queryForObject("SELECT id FROM protocol_config WHERE " +
+                    "protocol_id=? AND protocol_sdd_id=? AND use_29_bit_can_id=? AND use_frame_padding=? AND use_extended_address=?",
+                    [pc.protocol_id, pc.protocol_sdd_id, use_29_bit_can_id, pc.use_frame_padding, pc.use_extended_address] as Object[],
+                    Integer.class)
+        } catch (EmptyResultDataAccessException erd) {
+            throw new EngVehicleConfigUpdateFailedException("""No existing protocol config for: protocol id: ${pc.protocol_id},
+                        sdd id:${pc.protocol_sdd_id}, use_29_bit_can_id: ${use_29_bit_can_id ? true : false}, use_frame_padding: ${pc.use_frame_padding},
+                        use_extended_address: ${pc.use_extended_address}""".toString())
+        }
+        //EmptyResultDataAccessException
+        EngVehicleConfig closelyMatchedEVCRec = getGlobalDataSource(dbData).query("SELECT * FROM eng_vehicle_config " +
+                "WHERE year=? AND body=? AND protocol_config_id=? AND ecu_id=? AND db_name=? LIMIT 1",
+                [year, body, protConfId, v.ecu_id, ecu_db_name] as Object[],
+                new EngVehicleConfigRawMapper())[0]
+        if (closelyMatchedEVCRec == null) {
+            closelyMatchedEVCRec = getGlobalDataSource(dbData).query("SELECT * FROM eng_vehicle_config " +
+                    "WHERE year=? AND body=? AND ecu_id=? LIMIT 1",
+                    [year, body, v.ecu_id] as Object[],
+                    new EngVehicleConfigRawMapper())[0]
+
+            if(newEntry && closelyMatchedEVCRec == null) {
+                closelyMatchedEVCRec = getGlobalDataSource(dbData).query("SELECT * FROM eng_vehicle_config " +
+                        "WHERE year=? AND body=? LIMIT 1",
+                        [year, body] as Object[],
+                        new EngVehicleConfigRawMapper())[0]
+            }
+        }
+        println("closelyMatchedEVCRec = ${closelyMatchedEVCRec}")
+
+        if (!newEntry && closelyMatchedEVCRec == null) {
+            throw new EngVehicleConfigUpdateFailedException("Cannot find matching ECU Information for ${ecu_db_name}".toString())
+        }
+
+        def nameStringId, hexXmitString, gatewayBitPos, busId
+        if (!newEntry) {
+            nameStringId = closelyMatchedEVCRec.name_string_id
+            hexXmitString = closelyMatchedEVCRec.xmit_str
+            gatewayBitPos = closelyMatchedEVCRec.gateway_bit_position
+            busId = closelyMatchedEVCRec.bus_id
+        } else {
+            String ecu_name = ecu_db_name.split(/\-/)[0]
+            try {
+                nameStringId = getGlobalDataSource(dbData).queryForObject("SELECT name_string_id FROM eng_vehicle_config WHERE db_name LIKE '${ecu_name}-%' LIMIT 1", Integer.class)
+            } catch (SQLException |  EmptyResultDataAccessException e) {
+                e.printStackTrace()
+                throw new EngVehicleConfigUpdateFailedException("Cannot find \'name_string_id\' for ${ecu_db_name} in global db")
+            }
+            hexXmitString = (newEntryMap["hexXmitString"] != null) ? Integer.parseInt(newEntryMap["hexXmitString"], 16) : null
+            gatewayBitPos = (newEntryMap["gatewayBitPos"] != null) ? newEntryMap["gatewayBitPos"] : null
+            busId = newEntryMap["busId"]
+        }
+
+        EcuToBus eb = null
+        List<EcuToBus> ecu2busList = getEcuDataSource(ecu_db_name, dbData).query("SELECT * FROM ecu_to_bus WHERE bus_id=?",
+                [busId] as Object[],new EcuToBusMapper())
+        for(EcuToBus e2b : ecu2busList) {
+            if(use_29_bit_can_id == 1 && (e2b.request > 0x0FFF)) {
+                eb = e2b
+                break
+            } else if(use_29_bit_can_id == 0 && (e2b.request < 0x0FFF)) {
+                eb = e2b
+                break
+            }
+        }
+
+        if(eb == null) {
+            throw new EngVehicleConfigUpdateFailedException("Cannot find matching ecu_to_bus info with bus id: ${busId}, using ${(use_29_bit_can_id == 1)?"29":"11"} bit CAN IDs.")
+        }
+
+        res_eng_veh_conf = getGlobalDataSource(dbData).update("INSERT INTO eng_vehicle_config " +
+                "(year,body,var_ver_id,ecu_id,is_gateway," +
+                "xmit_str,disable_gateway_command,gateway_bit_position,bus_id,diag_bus_id," +
+                "request_id,response_id,broadcast_id,protocol_config_id,kline_protocol_config_id," +
+                "ecu_address,ident_type,is_engine,is_vin_master,architecture_id," +
+                "yb_version,ecu_config,name_string_id,db_name,built_state," +
+                "odometer_master_data,proxi_type,proxi_config_set_id,is_sgw) " +
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                [year,
+                 body,
+                 v.id,
+                 v.ecu_id,
+
+                 //this may needs to change as a BCM entry would be true for this, but then again closelyMatchedEVCRec should matched to an existing BCM rec
+                 (newEntry ? false : closelyMatchedEVCRec.is_gateway),
+                 //closelyMatchedEVCRec.xmit_str,
+                 hexXmitString,
+                 (newEntry ? null : closelyMatchedEVCRec.disable_gateway_command),
+                 //closelyMatchedEVCRec.gateway_bit_position,
+                 gatewayBitPos,
+                 //closelyMatchedEVCRec.bus_id,
+                 busId,
+                 //closelyMatchedEVCRec.diag_bus_id,
+                 busId,
+                 eb.request,
+                 eb.response,
+                 (newEntry ? eb.broadcast : closelyMatchedEVCRec.broadcast_id),
+                 protConfId,
+                 (newEntry ? null : closelyMatchedEVCRec.kline_protocol_config_id),
+                 (newEntry ? null: closelyMatchedEVCRec.ecu_address),
+                 v.ident_type,
+                 (newEntry ? false : closelyMatchedEVCRec.is_engine),
+                 (newEntry ? false : closelyMatchedEVCRec.is_vin_master),
+                 closelyMatchedEVCRec.architecture_id,
+                 closelyMatchedEVCRec.yb_version,
+                 (newEntry ? null : closelyMatchedEVCRec.ecu_config),
+                 //closelyMatchedEVCRec.name_string_id,
+                 nameStringId,
+                 ecu_db_name,
+                 (newEntry ? 1 : closelyMatchedEVCRec.built_state),
+                 (newEntry ? null : closelyMatchedEVCRec.odometer_master_data),
+                 closelyMatchedEVCRec.proxi_type,
+                 closelyMatchedEVCRec.proxi_config_set_id,
+                 (newEntry ? 0 : closelyMatchedEVCRec.is_sgw)] as Object[])
+
+        LOGGER.info("res_eng_veh_conf = ${res_eng_veh_conf}")
+
+        //check and insert in to var_ver table
+        //Number varVerId
+        try {
+            getGlobalDataSource(dbData).queryForObject("SELECT id FROM var_ver " +
+                    "WHERE id=? AND var=? AND ident=? AND min_ver=? AND ecu_id=? AND flash_type_id=? AND ident_type=?",
+                    [v.id, v.var, v.ident, v.min_ver, v.ecu_id, v.flash_type_id, v.ident_type] as Object[],
+                    Integer.class)
+        } catch (org.springframework.dao.EmptyResultDataAccessException er) {
+            res_var_ver = getGlobalDataSource(dbData).update("INSERT INTO var_ver " +
+                    "VALUES (?,?,?,?,?,?,?,?,?)",
+                    [v.id,
+                     v.var,
+                     v.ident,
+                     v.min_ver,
+                     v.ser_min_ver,
+                     v.ecu_id,
+                     null, //v.protocol_config_id, -> undefined in global db
+                     v.flash_type_id,
+                     v.ident_type
+                    ] as Object[])
+            LOGGER.info("res_var_ver = ${res_var_ver}")
+        }
+
+        if (res_eng_veh_conf == 1 && (res_var_ver == null || res_var_ver == 1)) {
+            "success"
+        } else {
+            LOGGER.info("Failed update res_eng_veh_conf = ${res_eng_veh_conf}, res_var_ver = ${res_var_ver}")
+            "failure"
+        }
+    }
+
+    public YbInfo yb(DbData dbData, YbInfo ybInfo) {
+        return getGlobalDataSource(dbData).query("SELECT * FROM yb_info WHERE year = ? AND body = ?",
+                [ybInfo.year, ybInfo.body] as Object[], new YbInfoRowMapper());
+    }
+
+    public List<EngVehicleConfig> engVehConfigsByYb(String year, String body, DbData dbData) {
+        return getGlobalDataSource(dbData).query(
+                "SELECT evc.id,year,body,var_ver_id,ecu_id,is_gateway,xmit_str," +
+                        "disable_gateway_command,gateway_bit_position,bus_id,diag_bus_id,request_id,response_id,broadcast_id," +
+                        "protocol_config_id,kline_protocol_config_id,ecu_address,ident_type,is_engine,is_vin_master,architecture_id," +
+                        "yb_version,ecu_config,name_string_id,db_name,built_state,odometer_master_data,proxi_type," +
+                        "proxi_config_set_id,is_sgw, ecu.acronym as ecu_acronym FROM eng_vehicle_config as evc, ecu " +
+                        "WHERE year=? AND body=? AND evc.ecu_id=ecu.id",
+                [year, body] as Object[],
+                new EngVehicleConfigRawMapper())
+    }
+
+
+    public List<Bus> engBuses(dbData) {
+        return getGlobalDataSource(dbData).query("SELECT * FROM bus", new BusRowMapper())
+    }
+
+    public List<VarVer> ecuVarVer(String ecu_db_name, DbData dbData) {
+        List<VarVer> varVerList = getEcuDataSource(ecu_db_name, dbData)
+                .query("SELECT * FROM var_ver", new EcuVarVerRowMapper())
+
+        List<EcuToBus> ecu2busList = getEcuDataSource(ecu_db_name, dbData).query("SELECT * FROM ecu_to_bus",new EcuToBusMapper())
+        boolean use_11_bit_can_id, use_29_bit_can_id
+        for(EcuToBus e2b : ecu2busList) {
+            if(e2b.request > 0xFFFF) {
+                use_29_bit_can_id = true
+            }
+            if(e2b.request < 0xFFFF) {
+                use_11_bit_can_id = true
+            }
+        }
+        for(VarVer v : varVerList) {
+            if(use_11_bit_can_id) v.has_11_bit_ids = true
+            if(use_29_bit_can_id) v.has_29_bit_ids = true
+        }
+        return varVerList
+    }
+
+    public List<Bus> ecuBus(String ecu_db_name, DbData dbData) {
+        List<EcuToBus> busList = getEcuDataSource(ecu_db_name, dbData).query("select b.* from bus b, ecu_to_bus e2b where b.id=e2b.bus_id",new BusRowMapper())
+        return busList
+    }
+
+    public updateVarVerInGlobal(String eng_veh_conf_id, String var_ver_id, DbData dbData) {
+        getGlobalDataSource(dbData).update("UPDATE eng_vehicle_config SET var_ver_id = ? WHERE id = ?", var_ver_id, eng_veh_conf_id)
+
+    }
+
+    public Integer deleteEngVehConf(Integer engVehConfid, DbData dbData) {
+        return getGlobalDataSource(dbData).update("DELETE FROM eng_vehicle_config WHERE id = ?", engVehConfid)
+    }
+
+
+    private static class YbInfoRowMapper implements RowMapper<YbInfo> {
+        public YbInfo mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def yb = new YbInfo()
+            yb.year = rs.getString("year")
+            yb.body = rs.getString("body")
+            return yb
+
+        }
+    }
+
+    private static class BusRowMapper implements RowMapper<Bus> {
+        public Bus mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def bus = new Bus()
+            bus.id = rs.getInt("id")
+            bus.name = rs.getString("name")
+            bus.display_name = rs.getString("display_name")
+            bus.diag_interface = rs.getString("diag_interface")
+            bus.type = rs.getString("type")
+            bus.interface_pins = rs.getString("interface")
+            return bus
+        }
+    }
+
+    private static class EcuConfigOverrideMapper implements RowMapper<EcuConfigOverride> {
+        public EcuConfigOverride mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def ecuConfigOverride = new EcuConfigOverride()
+            ecuConfigOverride.config = rs.getInt("config")
+            ecuConfigOverride.command = rs.getString("command")
+            ecuConfigOverride.implementation = rs.getString("implementation")
+            return ecuConfigOverride
+        }
+    }
+
+    private static class EngVehicleConfigRawMapper implements RowMapper<EngVehicleConfig> {
+        final private static Logger LOGGER = LoggerFactory.getLogger(this.getClass());
+        public EngVehicleConfig mapRow(ResultSet rs, int rowNum) {
+            def evc = new EngVehicleConfig()
+            evc.id = rs.getInt("id")
+            evc.year = rs.getInt("year")
+            evc.body = rs.getString("body")
+            evc.var_ver_id = rs.getInt("var_ver_id")
+            evc.ecu_id = rs.getInt("ecu_id")
+            try {
+                evc.ecu_acronym = rs.getString("ecu_acronym")
+            } catch (SQLException se) {
+                LOGGER.info("ecu_acronym not found")
+            }
+            evc.is_gateway = rs.getInt("is_gateway")
+            evc.xmit_str = rs.getInt("xmit_str")
+            if (rs.wasNull())
+                evc.xmit_str = null
+
+            evc.disable_gateway_command = rs.getString("disable_gateway_command")
+
+            evc.gateway_bit_position = rs.getInt("gateway_bit_position")
+            if (rs.wasNull())
+                evc.gateway_bit_position = null
+
+            evc.bus_id = rs.getInt("bus_id")
+            evc.diag_bus_id = rs.getInt("diag_bus_id")
+            evc.request_id = rs.getInt("request_id")
+            evc.response_id = rs.getInt("response_id")
+            evc.broadcast_id = rs.getInt("broadcast_id")
+            evc.protocol_config_id = rs.getInt("protocol_config_id")
+
+            evc.kline_protocol_config_id = rs.getInt("kline_protocol_config_id")
+            if (rs.wasNull())
+                evc.kline_protocol_config_id = null
+
+            evc.ecu_address = rs.getInt("ecu_address")
+            if (rs.wasNull())
+                evc.ecu_address = null
+
+            evc.ident_type = rs.getString("ident_type")
+            evc.is_engine = rs.getInt("is_engine")
+            evc.is_vin_master = rs.getInt("is_vin_master")
+            evc.architecture_id = rs.getInt("architecture_id")
+            evc.yb_version = rs.getString("yb_version")
+
+            evc.ecu_config = rs.getString("ecu_config")
+            if (rs.wasNull())
+                evc.ecu_config = null
+
+            evc.name_string_id = rs.getInt("name_string_id")
+            evc.db_name = rs.getString("db_name")
+            evc.built_state = rs.getInt("built_state")
+
+            evc.odometer_master_data = rs.getString("odometer_master_data")
+            if (rs.wasNull())
+                evc.odometer_master_data = null
+
+            evc.proxi_type = rs.getInt("proxi_type");
+            if (rs.wasNull())
+                evc.proxi_type = null
+
+            evc.proxi_config_set_id = rs.getInt("proxi_config_set_id");
+            if (rs.wasNull())
+                evc.proxi_config_set_id = null
+
+            evc.is_sgw = rs.getInt("is_sgw")
+            if (rs.wasNull())
+                evc.is_sgw = null
+
+            return evc
+        }
+    }
+
+    private static class EcuVarVerRowMapper implements RowMapper<VarVer> {
+        public VarVer mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def varver = new VarVer()
+            varver.id = rs.getInt("id")
+            varver.var = rs.getString("var")
+            varver.ident = rs.getString("ident")
+            varver.min_ver = rs.getInt("min_ver")
+            varver.ser_min_ver = rs.getInt("ser_min_ver")
+            varver.ecu_id = rs.getInt("ecu_id")
+            varver.protocol_config_id = rs.getInt("protocol_config_id")
+            varver.flash_type_id = rs.getInt("flash_type_id")
+            varver.ident_type = rs.getString("ident_type")
+            return varver
+        }
+    }
+
+    private static class EcuProtConfigRowMapper implements RowMapper<ProtocolConfig> {
+        public ProtocolConfig mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def pc = new ProtocolConfig()
+            pc.id = rs.getInt("id")
+            pc.protocol_id = rs.getInt("protocol_id")
+            pc.protocol_sdd_id = rs.getInt("protocol_sdd_id")
+            pc.use_29_bit_can_id = rs.getInt("use_29_bit_can_id")
+            pc.use_frame_padding = rs.getInt("use_frame_padding")
+            pc.use_extended_address = rs.getInt("use_extended_address")
+            pc.sdd_version = rs.getString("sdd_version")
+            pc.transport = rs.getString("transport")
+            return pc
+        }
+    }
+
+    private static class EcuToBusMapper implements RowMapper<EcuToBus> {
+        public EcuToBus mapRow(ResultSet rs, int rowNum) throws SQLException {
+            def eb = new EcuToBus()
+            eb.id = rs.getInt("id"); if (rs.wasNull()) eb.id = null
+            eb.ecu_id = rs.getInt("ecu_id"); if (rs.wasNull()) eb.ecu_id = null
+            eb.bus_id = rs.getInt("bus_id"); if (rs.wasNull()) eb.bus_id = null
+            eb.var_ver_id = rs.getInt("var_ver_id"); if (rs.wasNull()) eb.var_ver_id = null
+            eb.protocol_config_id = rs.getInt("protocol_config_id"); if (rs.wasNull()) eb.protocol_config_id = null
+            eb.kline_protocol_config_id = rs.getInt("kline_protocol_config_id"); if (rs.wasNull()) eb.kline_protocol_config_id = null
+            eb.request = rs.getInt("request"); if (rs.wasNull()) eb.request = null
+            eb.response = rs.getInt("response"); if (rs.wasNull()) eb.response = null
+            eb.ecu_address = rs.getInt("ecu_address"); if (rs.wasNull()) eb.ecu_address = null
+            eb.broadcast = rs.getInt("broadcast"); if (rs.wasNull()) eb.broadcast = null
+            return eb
+        }
+    }
+
+    private JdbcOperations getGlobalDataSource(DbData dbData) {
+        if (jdbc_global == null) {
+            DataSource ds = DataSourceBuilder.create()
+                    .username("")
+                    .password("")
+                    .url("jdbc:sqlite:${dbData.GLOBAL_DB};crypt_key=<DB_ENCRYPTION_KEY>;")
+                    .driverClassName("org.sqlite.JDBC")
+                    .build();
+
+            jdbc_global = new JdbcTemplate(ds)
+        }
+        return jdbc_global;
+    }
+
+    private JdbcOperations getEcuDataSource(String ecu_db_name, DbData dbData) {
+        if (dbData.ECU_DBS[ecu_db_name] == null) {
+
+            String db_path = "${dbData.ECUS_DB_DIR}/${ecu_db_name}.db"
+
+            DataSource ds = DataSourceBuilder.create()
+                    .username("")
+                    .password("")
+                    .url("jdbc:sqlite:${db_path};crypt_key=<DB_ENCRYPTION_KEY>;")
+                    .driverClassName("org.sqlite.JDBC")
+                    .build();
+            dbData.ECU_DBS[ecu_db_name] = new JdbcTemplate(ds)
+        }
+        return dbData.ECU_DBS[ecu_db_name];
+    }
+}

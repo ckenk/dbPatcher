@@ -1,0 +1,15 @@
+<!doctype html> <html> <head> <meta charset="utf-8"> <title></title> <meta name="description" content=""> <meta name="viewport" content="width=device-width,initial-scale=1"> <!-- Place favicon.ico and apple-touch-icon.png in the root directory --> <link rel="stylesheet" href="styles/vendor.96921311.css"> <link rel="stylesheet" href="styles/main.a37ba9e4.css"> <!--
+	     <script src="http://nervgh.github.io/js/es5-shim.min.js"></script>
+        <script src="http://nervgh.github.io/js/es5-sham.min.js"></script>
+        <script src="http://code.jquery.com/jquery-1.8.3.min.js"></script>
+        <script src="app/scripts/console-sham.js"></script>
+		<meta charset="utf-8"/>
+--> </head> <body ng-app="dbeditClientApp"> <!--[if lte IE 8]>
+      <p class="browsehappy">You are using an <strong>outdated</strong> browser. Please <a href="http://browsehappy.com/">upgrade your browser</a> to improve your experience.</p>
+    <![endif]--> <!-- Add your site or application content here --> <div class="header"> <div class="navbar navbar-default" role="navigation"> <div class="container"> <div class="navbar-header"> <button type="button" class="navbar-toggle collapsed" data-toggle="collapse" data-target="#js-navbar-collapse"> <span class="sr-only">Toggle navigation</span> <span class="icon-bar"></span> <span class="icon-bar"></span> <span class="icon-bar"></span> </button> <a class="navbar-brand" href="#/">Silent Updater</a> </div> <div class="collapse navbar-collapse" id="js-navbar-collapse" ng-controller="HeaderCtrl"> <ul class="nav navbar-nav"> <li ng-class="{ active: isActive('/')}"><a href="#/">Home</a></li> <li ng-class="{ active: isActive('/upload')}"><a ng-href="#/upload">Upload</a></li> <li ng-class="{ active: isActive('/edit')}"><a ng-href="#/edit">Edit</a></li> <li ng-class="{ active: isActive('/about')}"><a ng-href="#/about">About</a></li> </ul> </div> </div> </div> </div> <div class="container"> <div ng-view=""></div> </div> <div class="footer"> <div class="container"> <p><span class="glyphicon glyphicon-heart"></span> from the Yeoman team</p> </div> </div> <!-- Google Analytics: change UA-XXXXX-X to be your site's ID --> <script>!function(A,n,g,u,l,a,r){A.GoogleAnalyticsObject=l,A[l]=A[l]||function(){
+       (A[l].q=A[l].q||[]).push(arguments)},A[l].l=+new Date,a=n.createElement(g),
+       r=n.getElementsByTagName(g)[0],a.src=u,r.parentNode.insertBefore(a,r)
+       }(window,document,'script','https://www.google-analytics.com/analytics.js','ga');
+
+       ga('create', 'UA-XXXXX-X');
+       ga('send', 'pageview');</script> <script src="scripts/vendor.9dbac73e.js"></script> <!--	http://stackoverflow.com/a/37677657/850777 : http://stackoverflow.com/questions/19100225/angularjs-read-from-properties-file --> <!--	http://stackoverflow.com/a/34059131/850777 : http://stackoverflow.com/questions/24621522/how-to-make-grunt-not-minify-certain-js-files --> <script src="scripts/scripts.dad56b22.js"></script> </body> </html>

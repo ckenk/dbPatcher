@@ -1,0 +1,3 @@
+upload-dir/**
+**/*.7z*
+build/**
