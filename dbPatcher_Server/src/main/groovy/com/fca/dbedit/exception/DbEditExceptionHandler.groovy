@@ -26,21 +26,6 @@ class DbEditExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger LOGGER = LoggerFactory.getLogger(MethodHandles.lookup().lookupClass());
 
-//    //Only works for 500
-//    //http://blog.codeleak.pl/2013/11/controlleradvice-improvements-in-spring.html
-//    @ExceptionHandler(value = EngVehicleConfigUpdateFailedException.class)
-//    @ResponseStatus(HttpStatus.INTERNAL_SERVER_ERROR)
-//    @ResponseBody
-//    public ErrorResource exception(Exception e, WebRequest request) {
-//        EngVehicleConfigUpdateFailedException evcCongUpFailedException = (EngVehicleConfigUpdateFailedException) e;
-//        ErrorResource error = new ErrorResource(
-//                (evcCongUpFailedException.status == null ? HttpStatus.NOT_MODIFIED.toString() : evcCongUpFailedException.status),
-//                evcCongUpFailedException.message);
-//        HttpHeaders headers = new HttpHeaders();
-//        headers.setContentType(MediaType.APPLICATION_JSON);
-//        return error
-//    }
-
 //    http://stackoverflow.com/questions/22157687/spring-mvc-rest-handing-bad-url-404-by-returning-json
     @ExceptionHandler(value = [EngVehicleConfigUpdateFailedException.class, SQLException.class, IOException.class])
     public ResponseEntity<String> exception(Exception e, WebRequest request) {
@@ -55,7 +40,6 @@ class DbEditExceptionHandler extends ResponseEntityExceptionHandler {
 
         LOGGER.error((e.message != null ? e.message : "<no message error>"),e)
 
-//        return new ResponseEntity<String>(s, headers, HttpStatus.BAD_REQUEST); //This works!!!!!!!!!
-        return new ResponseEntity<String>(error, headers, HttpStatus.BAD_REQUEST); //This works!!!!!!!!!
+        return new ResponseEntity<String>(error, headers, HttpStatus.BAD_REQUEST);
     }
 }
