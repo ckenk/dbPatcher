@@ -14,7 +14,7 @@
 			<br>
 			<i ng-show="myForm.file.$error.maxSize">File too large {{errorFile.size / 1000000|number:1}}MB: max 2M</i>
 			
-			<button ng-disabled="!glDbForm.$valid" ng-click="uploadPic(vehicleFile)">Submit</button>
+			<button ng-disabled="!glDbForm.$valid" ng-click="uploadVehicle(vehicleFile)">Submit</button>
 			<span class="progress" ng-show="vehicleFile.progress >= 0">
         		<div style="width:{{vehicleFile.progress}}%" ng-bind="vehicleFile.progress + '%'"></div>
       		</span>
