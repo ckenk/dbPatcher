@@ -191,7 +191,7 @@ class DbEditController {
             return new ResponseEntity<Map<String, String>>(["result": "success"], HttpStatus.OK);
         };
         LOGGER.info("Delete failed: ${eng_veh_conf_id}, ${result}")
-        return new ResponseEntity<Map<String, String>>(["result": "failed"], HttpStatus.NOT_MODIFIED);
+        return new ResponseEntity<Map<String, String>>(["result": "failed"], HttpStatus.OK);
     }
 
     @RequestMapping(method = RequestMethod.POST, value = "/global/{year}/{body}", produces = "application/json")
